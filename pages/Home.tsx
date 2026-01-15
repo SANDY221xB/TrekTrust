@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trek, Company, Review } from '../types';
-import StarRating from '../components/StarRating';
+import { Trek, Company, Review } from '../types.ts';
+import StarRating from '../components/StarRating.tsx';
 
 interface HomeProps {
   treks: Trek[];

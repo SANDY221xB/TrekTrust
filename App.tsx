@@ -1,14 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout';
-import Home from './pages/Home';
-import Dashboard from './pages/Dashboard';
-import Admin from './pages/Admin';
-import TrekDetails from './pages/TrekDetails';
-import { AppState, User, Verification, Review, Role } from './types';
-import { db } from './services/db';
-import { INITIAL_ADMIN, INITIAL_USER } from './constants';
+import Layout from './components/Layout.tsx';
+import Home from './pages/Home.tsx';
+import Dashboard from './pages/Dashboard.tsx';
+import Admin from './pages/Admin.tsx';
+import TrekDetails from './pages/TrekDetails.tsx';
+import Login from './pages/Login.tsx';
+import ProtectedRoute from './components/ProtectedRoute.tsx';
+import { AppState, Verification, Review, Role } from './types.ts';
+import { db } from './services/db.ts';
+import { INITIAL_ADMIN, INITIAL_USER } from './constants.tsx';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>(db.get());
@@ -54,14 +56,39 @@ const App: React.FC = () => {
     }));
   };
 
-  const handleSubmitReview = (r: Omit<Review, 'id' | 'createdAt' | 'userName'>) => {
-    const newR: Review = {
-      ...r,
-      id: `r${Date.now()}`,
-      userName: state.currentUser?.name || 'Anonymous',
-      createdAt: new Date().toISOString()
-    };
-    setState(prev => ({ ...prev, reviews: [...prev.reviews, newR] }));
+  const handleSubmitReview = (r: Omit<Review, 'id' | 'createdAt' | 'userName'> & { id?: string }) => {
+    setState(prev => {
+      const existingIdx = r.id ? prev.reviews.findIndex(item => item.id === r.id) : -1;
+      
+      if (existingIdx > -1) {
+        // Update existing review
+        const updatedReviews = [...prev.reviews];
+        updatedReviews[existingIdx] = {
+          ...updatedReviews[existingIdx],
+          ...r,
+          id: r.id! // Keep the original ID
+        };
+        return { ...prev, reviews: updatedReviews };
+      } else {
+        // Create new review
+        const newR: Review = {
+          ...r as Omit<Review, 'id' | 'createdAt' | 'userName'>,
+          id: `r${Date.now()}`,
+          userName: prev.currentUser?.name || 'Anonymous',
+          createdAt: new Date().toISOString()
+        };
+        return { ...prev, reviews: [...prev.reviews, newR] };
+      }
+    });
+  };
+
+  const handleDeleteReview = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this review? This action is permanent.')) {
+      setState(prev => ({
+        ...prev,
+        reviews: prev.reviews.filter(r => r.id !== id)
+      }));
+    }
   };
 
   return (
@@ -69,62 +96,49 @@ const App: React.FC = () => {
       <Layout user={state.currentUser} onLogout={handleLogout}>
         <Routes>
           <Route path="/" element={<Home treks={state.treks} companies={state.companies} reviews={state.reviews} />} />
-          <Route path="/trek/:id" element={<TrekDetails treks={state.treks} companies={state.companies} reviews={state.reviews} users={[]} />} />
+          <Route path="/trek/:id" element={<TrekDetails treks={state.treks} companies={state.companies} reviews={state.reviews} users={[INITIAL_USER]} />} />
           
           <Route 
             path="/dashboard" 
-            element={state.currentUser ? (
-              <Dashboard 
-                user={state.currentUser} 
-                treks={state.treks} 
-                companies={state.companies} 
-                verifications={state.verifications} 
-                reviews={state.reviews}
-                onSubmitVerification={handleSubmitVerification}
-                onSubmitReview={handleSubmitReview}
-              />
-            ) : <Navigate to="/login" />} 
+            element={
+              <ProtectedRoute user={state.currentUser}>
+                <Dashboard 
+                  user={state.currentUser!} 
+                  treks={state.treks} 
+                  companies={state.companies} 
+                  verifications={state.verifications} 
+                  reviews={state.reviews}
+                  onSubmitVerification={handleSubmitVerification}
+                  onSubmitReview={handleSubmitReview}
+                />
+              </ProtectedRoute>
+            } 
           />
           
           <Route 
             path="/admin" 
-            element={state.currentUser?.role === 'ADMIN' ? (
-              <Admin 
-                verifications={state.verifications} 
-                users={[INITIAL_USER]} // Simulating single user for demo
-                treks={state.treks}
-                companies={state.companies}
-                reviews={state.reviews}
-                onApprove={handleApproveVerification}
-                onReject={handleRejectVerification}
-              />
-            ) : <Navigate to="/" />} 
+            element={
+              <ProtectedRoute user={state.currentUser} requiredRole="ADMIN">
+                <Admin 
+                  verifications={state.verifications} 
+                  users={[INITIAL_USER]} 
+                  treks={state.treks}
+                  companies={state.companies}
+                  reviews={state.reviews}
+                  onApprove={handleApproveVerification}
+                  onReject={handleRejectVerification}
+                  onDeleteReview={handleDeleteReview}
+                />
+              </ProtectedRoute>
+            } 
           />
 
-          <Route path="/login" element={
-            <div className="flex items-center justify-center py-20">
-              <div className="bg-white p-10 rounded-3xl shadow-xl border max-w-md w-full text-center">
-                <h2 className="text-3xl font-bold mb-8">Login to TrekTrust</h2>
-                <div className="space-y-4">
-                  <button 
-                    onClick={() => handleLogin('USER')}
-                    className="w-full bg-green-700 text-white py-4 rounded-xl font-bold shadow-md hover:bg-green-800 transition-all"
-                  >
-                    Login as Hiker (Rahul)
-                  </button>
-                  <button 
-                    onClick={() => handleLogin('ADMIN')}
-                    className="w-full bg-gray-900 text-white py-4 rounded-xl font-bold shadow-md hover:bg-black transition-all"
-                  >
-                    Login as Admin
-                  </button>
-                </div>
-                <p className="mt-8 text-sm text-gray-400">Secure, verified, and community driven.</p>
-              </div>
-            </div>
-          } />
+          <Route 
+            path="/login" 
+            element={state.currentUser ? <Navigate to="/dashboard" replace /> : <Login onLogin={handleLogin} />} 
+          />
 
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
     </Router>
