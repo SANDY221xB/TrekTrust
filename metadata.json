@@ -1,0 +1,7 @@
+{
+  "name": "TrekTrust India",
+  "description": "Verified trekking company reviews for treks across India. Upload certificates, get verified, and help others find the best trekking partners.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
